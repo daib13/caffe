@@ -74,8 +74,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\caffe\test\test_caffe_main.cpp" />
-    <ClCompile Include="..\..\src\caffe\test\test_duplicate_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_layer_factory.cpp" />
+    <ClCompile Include="..\..\src\caffe\test\test_log_probability_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_protobuf.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_syncedmem.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_util_blas.cpp" />
