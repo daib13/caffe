@@ -12,6 +12,8 @@
 
 namespace caffe {
 
+#define LOG_TWO_PI 1.83787706638
+
 // Caffe gemm provides a simpler interface to the gemm functions, with the
 // limitation that the data has to be contiguous in memory.
 template <typename Dtype>
