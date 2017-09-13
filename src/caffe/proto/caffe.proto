@@ -409,6 +409,8 @@ message LayerParameter {
   optional WindowDataParameter window_data_param = 129;
   optional MILDataParameter mil_data_param = 0x004d4944; //"MID"
   optional MILParameter mil_param = 0x004d494c; //"MIL"
+  optional VAELossParameter vae_loss_param = 201;
+  optional KLLossParameter klloss_param = 202;
 }
 
 // Message that stores parameters used to apply transformation
@@ -844,6 +846,11 @@ message InputParameter {
   repeated BlobShape shape = 1;
 }
 
+message KLLossParameter {
+    optional float mu = 1 [default = 0];
+    optional float var = 2 [default = 1];
+}
+
 // Message that stores parameters used by LogLayer
 message LogParameter {
   // LogLayer computes outputs y = log_base(shift + scale * x), for base > 0.
@@ -1201,6 +1208,14 @@ message MILParameter {
   optional MILType type = 1 [default = MAX]; // The MIL method
 }
 
+message VAELossParameter {
+  enum VarianceType {
+    PIXEL = 0;
+    ITEM = 1;
+  }
+  optional float epsilon = 1 [default = 0.01];
+  optional VarianceType type = 2 [default = PIXEL];
+}
 
 message WindowDataParameter {
   // Specify the data source.
