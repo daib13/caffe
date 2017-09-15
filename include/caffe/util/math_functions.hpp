@@ -14,6 +14,15 @@ namespace caffe {
 
 #define LOG_TWO_PI 1.83787706638
 
+// Implement matrix inverse
+template <typename Dtype>
+void caffe_gpu_matrix_inverse(const int N, const int D,
+	const Dtype* input, Dtype* output, Dtype* det);
+
+template <typename Dtype>
+void caffe_cpu_matrix_inverse(const int N, const int D,
+	const Dtype* input, Dtype* output, Dtype* det);
+
 // Caffe gemm provides a simpler interface to the gemm functions, with the
 // limitation that the data has to be contiguous in memory.
 template <typename Dtype>

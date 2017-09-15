@@ -198,6 +198,7 @@
     <ClCompile Include="..\..\src\caffe\util\insert_splits.cpp" />
     <ClCompile Include="..\..\src\caffe\util\io.cpp" />
     <ClCompile Include="..\..\src\caffe\util\math_functions.cpp" />
+    <ClCompile Include="..\..\src\caffe\util\matrix_inverse.cpp" />
     <ClCompile Include="..\..\src\caffe\util\signal_handler.cpp" />
     <ClCompile Include="..\..\src\caffe\util\upgrade_proto.cpp" />
   </ItemGroup>
@@ -385,6 +386,7 @@
     <CudaCompile Include="..\..\src\caffe\layers\smooth_L1_loss_ohem_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\softmax_loss_ohem_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\vae_loss_layer.cu" />
+    <CudaCompile Include="..\..\src\caffe\util\matrix_inverse.cu" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="$(SolutionDir)\CommonSettings.targets" />
