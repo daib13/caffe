@@ -6,11 +6,19 @@
 namespace caffe {
 
 template <typename Dtype>
-__global__ void LogProbabilityForwardDim(const int nthreads, const Dtype* x_data, const Dtype* x_hat_data,
+__global__ void LogProbabilityForwardDimBernoulli(const int nthreads, const Dtype* x_data, const Dtype* x_hat_data,
 	Dtype* p_dim_data) {
 	CUDA_KERNEL_LOOP(index, nthreads) {
 		p_dim_data[index] = x_data[index] * log(max(Dtype(1e-12), x_hat_data[index]))
 			+ (1 - x_data[index]) * log(max(Dtype(1e-12), Dtype(1 - x_hat_data[index])));
+	}
+}
+
+template <typename Dtype>
+__global__ void LogProbabilityForwardDimGaussian(const int nthreads, const Dtype* diff_data, 
+	const Dtype two_var, const Dtype log_sigma, Dtype* p_dim_data) {
+	CUDA_KERNEL_LOOP(index, nthreads) {
+		p_dim_data[index] = -pow(diff_data[index], 2) / two_var - LOG_TWO_PI - log_sigma;
 	}
 }
 
@@ -32,8 +40,16 @@ void LogProbabilityLayer<Dtype>::Forward_gpu(
 	const Dtype* x_hat_data = bottom[0]->gpu_data();
 	const Dtype* x_data = x_duplicate_.gpu_data();
 	Dtype* p_dim_data = p_dim_.mutable_gpu_data();
-	LogProbabilityForwardDim<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_,
-		x_data, x_hat_data, p_dim_data);
+	if (distance_type_ == LogProbabilityParameter_DistanceType_BERNOULLI) {
+		LogProbabilityForwardDimBernoulli<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_,
+			x_data, x_hat_data, p_dim_data);
+	}
+	else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
+		Dtype* diff_data = p_dim_.mutable_gpu_diff();
+		caffe_gpu_sub<Dtype>(bottom[0]->count(), x_data, x_hat_data, diff_data);
+		LogProbabilityForwardDimGaussian<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_,
+			diff_data, two_var_, log_sigma_, p_dim_data);
+	}
 
 	Dtype* p_data = top[0]->mutable_gpu_data();
 	LogProbabilityForwardP<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_, N_, D_, 
@@ -41,7 +57,7 @@ void LogProbabilityLayer<Dtype>::Forward_gpu(
 }
 
 template <typename Dtype>
-__global__ void LogProbabilityBackwardXhat(const int nthreads, const int K, const int N, const int D,
+__global__ void LogProbabilityBackwardXhatBernoulli(const int nthreads, const int K, const int N, const int D,
 	const Dtype* x_data, const Dtype* x_hat_data,
 	const Dtype* p_diff, Dtype* x_hat_diff) {
 	CUDA_KERNEL_LOOP(index, nthreads) {
@@ -52,13 +68,31 @@ __global__ void LogProbabilityBackwardXhat(const int nthreads, const int K, cons
 }
 
 template <typename Dtype>
-__global__ void LogProbabilityBackwardX(const int nthreads, const int K, const int N, const int D,
+__global__ void LogProbabilityBackwardXhatGaussian(const int nthreads, const int K, const int N, const int D,
+	const Dtype* diff_data, const Dtype two_var, const Dtype* p_diff, Dtype* x_hat_diff) {
+	CUDA_KERNEL_LOOP(index, nthreads) {
+		int p_idx = (index / D % N) * K + index / D / N;
+		x_hat_diff[index] = 2 * diff_data[index] / two_var * p_diff[p_idx];
+	}
+}
+
+template <typename Dtype>
+__global__ void LogProbabilityBackwardXBernoulli(const int nthreads, const int K, const int N, const int D,
 	const Dtype* x_data, const Dtype* x_hat_data,
 	const Dtype* p_diff, Dtype* x_diff) {
 	CUDA_KERNEL_LOOP(index, nthreads) {
 		int p_idx = (index / D % N) * K + index / D / N;
 		x_diff[index] = p_diff[p_idx] * (log(max(Dtype(1e-12), x_hat_data[index]))
 			- log(max(Dtype(1e-12), Dtype(1) - x_hat_data[index])));
+	}
+}
+
+template <typename Dtype>
+__global__ void LogProbabilityBackwardXGaussian(const int nthreads, const int K, const int N, const int D,
+	const Dtype* diff_data, const Dtype two_var, const Dtype* p_diff, Dtype* x_diff) {
+	CUDA_KERNEL_LOOP(index, nthreads) {
+		int p_idx = (index / D % N) * K + index / D / N;
+		x_diff[index] = -2 * diff_data[index] / two_var * p_diff[p_idx];
 	}
 }
 
@@ -70,13 +104,27 @@ void LogProbabilityLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 	const Dtype* x_data = x_duplicate_.gpu_data();
 	if (propagate_down[0]) {
 		Dtype* x_hat_diff = bottom[0]->mutable_gpu_diff();
-		LogProbabilityBackwardXhat<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_, K_, N_, D_,
-			x_data, x_hat_data, p_diff, x_hat_diff);
+		if (distance_type_ == LogProbabilityParameter_DistanceType_BERNOULLI) {
+			LogProbabilityBackwardXhatBernoulli<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_, K_, N_, D_,
+				x_data, x_hat_data, p_diff, x_hat_diff);
+		}
+		else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
+			const Dtype* diff_data = p_dim_.gpu_diff();
+			LogProbabilityBackwardXhatGaussian<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_, K_, N_, D_,
+				diff_data, two_var_, p_diff, x_hat_diff);
+		}
 	}
 	if (propagate_down[1]) {
 		Dtype* x_diff = x_duplicate_.mutable_gpu_diff();
-		LogProbabilityBackwardX<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_, K_, N_, D_,
-			x_data, x_hat_data, p_diff, x_diff);
+		if (distance_type_ == LogProbabilityParameter_DistanceType_BERNOULLI) {
+			LogProbabilityBackwardXBernoulli<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_, K_, N_, D_,
+				x_data, x_hat_data, p_diff, x_diff);
+		}
+		else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
+			const Dtype* diff_data = p_dim_.gpu_diff();
+			LogProbabilityBackwardXGaussian<Dtype><<<CAFFE_GET_BLOCKS(K_*N_*D_), CAFFE_CUDA_NUM_THREADS>>>(K_*N_*D_, K_, N_, D_,
+				diff_data, two_var_, p_diff, x_diff);
+		}
 		Dtype* bottom_diff = bottom[1]->mutable_gpu_diff();
 		caffe_gpu_set<Dtype>(bottom[1]->count(), Dtype(0), bottom_diff);
 		for (int k = 0; k < K_; ++k)

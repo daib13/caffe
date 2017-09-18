@@ -413,6 +413,7 @@ message LayerParameter {
   optional KLLossParameter klloss_param = 202;
   optional DuplicateParameter duplicate_param = 203;
   optional SeparateLossParameter separate_loss_param = 204;
+  optional LogProbabilityParameter log_probability_param = 205;
 }
 
 // Message that stores parameters used to apply transformation
@@ -855,6 +856,15 @@ message InputParameter {
 message KLLossParameter {
     optional float mu = 1 [default = 0];
     optional float var = 2 [default = 1];
+}
+
+message LogProbabilityParameter {
+  enum DistanceType {
+    BERNOULLI = 0;
+    GAUSSIAN = 1;
+  }
+  optional DistanceType distance_type = 1 [default = BERNOULLI];
+  optional float sigma = 2 [default = 1];
 }
 
 // Message that stores parameters used by LogLayer

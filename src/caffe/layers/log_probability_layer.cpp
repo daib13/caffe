@@ -19,6 +19,11 @@ void LogProbabilityLayer<Dtype>::LayerSetUp(
 	concat_layer_top_.clear();
 	concat_layer_top_.push_back(&x_duplicate_);
 	concat_layer_->SetUp(concat_layer_bottom_, concat_layer_top_);
+
+	distance_type_ = this->layer_param_.log_probability_param().distance_type();
+	sigma_ = max(Dtype(0.01), Dtype(this->layer_param_.log_probability_param().sigma()));
+	two_var_ = 2 * sigma_ * sigma_;
+	log_sigma_ = log(sigma_);
 }
 
 template <typename Dtype>
@@ -49,14 +54,29 @@ void LogProbabilityLayer<Dtype>::Forward_cpu(
 	Dtype* p_dim_data = p_dim_.mutable_cpu_data();
 	Dtype* p_data = top[0]->mutable_cpu_data();
 	int idx = 0;
-	for (int k = 0; k < K_; ++k)
-	for (int n = 0; n < N_; ++n) {
-		int p_idx = n*K_ + k;
-		p_data[p_idx] = 0;
-		for (int d = 0; d < D_; ++d) {
-			p_dim_data[idx] = x_data[idx] * log(max(Dtype(1e-12), x_hat_data[idx]))
-				+ (1 - x_data[idx]) * log(max(Dtype(1e-12), Dtype(1 - x_hat_data[idx])));
-			p_data[p_idx] += p_dim_data[idx++];
+	if (distance_type_ == LogProbabilityParameter_DistanceType_BERNOULLI) {
+		for (int k = 0; k < K_; ++k)
+		for (int n = 0; n < N_; ++n) {
+			int p_idx = n*K_ + k;
+			p_data[p_idx] = 0;
+			for (int d = 0; d < D_; ++d) {
+				p_dim_data[idx] = x_data[idx] * log(max(Dtype(1e-12), x_hat_data[idx]))
+					+ (1 - x_data[idx]) * log(max(Dtype(1e-12), Dtype(1 - x_hat_data[idx])));
+				p_data[p_idx] += p_dim_data[idx++];
+			}
+		}
+	}
+	else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
+		Dtype* diff_data = p_dim_.mutable_cpu_diff();
+		caffe_sub<Dtype>(bottom[0]->count(), x_data, x_hat_data, diff_data);
+		for (int k = 0; k < K_; ++k)
+		for (int n = 0; n < N_; ++n) {
+			int p_idx = n*K_ + k;
+			p_data[p_idx] = 0;
+			for (int d = 0; d < D_; ++d) {
+				p_dim_data[idx] = -pow(diff_data[idx], 2) / two_var_ - LOG_TWO_PI - log_sigma_;
+				p_data[p_idx] += p_dim_data[idx++];
+			}
 		}
 	}
 }
@@ -70,26 +90,52 @@ void LogProbabilityLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 	if (propagate_down[0]) {
 		Dtype* x_hat_diff = bottom[0]->mutable_cpu_diff();
 		int idx = 0;
-		for (int k = 0; k < K_; ++k)
-		for (int n = 0; n < N_; ++n) {
-			int p_idx = n*K_ + k;
-			for (int d = 0; d < D_; ++d) {
-				x_hat_diff[idx] = (x_data[idx] - x_hat_data[idx]) /
-					max(Dtype(1e-12), x_hat_data[idx] * (1 - x_hat_data[idx]));
-				x_hat_diff[idx++] *= p_diff[p_idx];
+		if (distance_type_ == LogProbabilityParameter_DistanceType_BERNOULLI) {
+			for (int k = 0; k < K_; ++k)
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				for (int d = 0; d < D_; ++d) {
+					x_hat_diff[idx] = (x_data[idx] - x_hat_data[idx]) /
+						max(Dtype(1e-12), x_hat_data[idx] * (1 - x_hat_data[idx]));
+					x_hat_diff[idx++] *= p_diff[p_idx];
+				}
+			}
+		}
+		else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
+			const Dtype* diff_data = p_dim_.cpu_diff();
+			for (int k = 0; k < K_; ++k)
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				for (int d = 0; d < D_; ++d) {
+					x_hat_diff[idx] = 2 * diff_data[idx] / two_var_ * p_diff[p_idx];
+					++idx;
+				}
 			}
 		}
 	}
 	if (propagate_down[1]) {
 		Dtype* x_diff = x_duplicate_.mutable_cpu_diff();
 		int idx = 0;
-		for (int k = 0; k < K_; ++k)
-		for (int n = 0; n < N_; ++n) {
-			int p_idx = n*K_ + k;
-			for (int d = 0; d < D_; ++d) {
-				x_diff[idx] = log(max(Dtype(1e-12), x_hat_data[idx]))
-					- log(max(Dtype(1e-12), Dtype(1) - x_hat_data[idx]));
-				x_diff[idx++] *= p_diff[p_idx];
+		if (distance_type_ == LogProbabilityParameter_DistanceType_BERNOULLI) {
+			for (int k = 0; k < K_; ++k)
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				for (int d = 0; d < D_; ++d) {
+					x_diff[idx] = log(max(Dtype(1e-12), x_hat_data[idx]))
+						- log(max(Dtype(1e-12), Dtype(1) - x_hat_data[idx]));
+					x_diff[idx++] *= p_diff[p_idx];
+				}
+			}
+		}
+		else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
+			const Dtype* diff_data = p_dim_.cpu_diff();
+			for (int k = 0; k < K_; ++k)
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				for (int d = 0; d < D_; ++d) {
+					x_diff[idx] = -2 * diff_data[idx] / two_var_ * p_diff[p_idx];
+					++idx;
+				}
 			}
 		}
 		Dtype* bottom_diff = bottom[1]->mutable_cpu_diff();

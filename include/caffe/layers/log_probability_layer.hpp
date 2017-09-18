@@ -47,6 +47,8 @@ class LogProbabilityLayer : public Layer<Dtype> {
   shared_ptr<Layer<Dtype> > concat_layer_;
   vector<Blob<Dtype>*> concat_layer_bottom_;
   vector<Blob<Dtype>*> concat_layer_top_;
+  Dtype sigma_, two_var_, log_sigma_;
+  LogProbabilityParameter_DistanceType distance_type_;
 };
 
 }  // namespace caffe

@@ -60,6 +60,7 @@ TYPED_TEST(LogProbabilityLayerTest, TestGradient) {
     LayerParameter layer_param;
 	layer_param.add_propagate_down(true);
 	layer_param.add_propagate_down(true);
+	layer_param.mutable_log_probability_param()->set_distance_type(LogProbabilityParameter_DistanceType_BERNOULLI);
     LogProbabilityLayer<Dtype> layer(layer_param);
     GradientChecker<Dtype> checker(1e-2, 5e-3);
     checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
@@ -67,6 +68,33 @@ TYPED_TEST(LogProbabilityLayerTest, TestGradient) {
   } else {
     LOG(ERROR) << "Skipping test due to old architecture.";
   }
+}
+
+TYPED_TEST(LogProbabilityLayerTest, TestGradient2) {
+	typedef typename TypeParam::Dtype Dtype;
+	bool IS_VALID_CUDA = false;
+#ifndef CPU_ONLY
+	IS_VALID_CUDA = CAFFE_TEST_CUDA_PROP.major >= 2;
+#endif
+	if (Caffe::mode() == Caffe::CPU ||
+		sizeof(Dtype) == 4 || IS_VALID_CUDA) {
+		LayerParameter layer_param;
+		layer_param.add_propagate_down(true);
+		layer_param.add_propagate_down(true);
+		layer_param.mutable_log_probability_param()->set_distance_type(LogProbabilityParameter_DistanceType_GAUSSIAN);
+		layer_param.mutable_log_probability_param()->set_sigma(1.2);
+		LogProbabilityLayer<Dtype> layer(layer_param);
+		FillerParameter filler_param;
+		GaussianFiller<Dtype> filler(filler_param);
+		filler.Fill(this->blob_bottom1_);
+		filler.Fill(this->blob_bottom2_);
+		GradientChecker<Dtype> checker(1e-2, 5e-3);
+		checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
+			this->blob_top_vec_);
+	}
+	else {
+		LOG(ERROR) << "Skipping test due to old architecture.";
+	}
 }
 
 }  // namespace caffe
