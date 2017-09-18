@@ -63,6 +63,8 @@ __global__ void SeparateLossBackwardX(const int nthreads, const int K, const int
 template <typename Dtype>
 void SeparateLossLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
+	if (!propagate_down[0])
+		return;
 	const Dtype scale = top[0]->cpu_diff()[0] / N_ / (K_*K_ - K_);
 	const Dtype* x_data = bottom[0]->gpu_data();
 	const Dtype* loss_data = loss_.gpu_data();

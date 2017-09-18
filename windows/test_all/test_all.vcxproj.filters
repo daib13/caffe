@@ -35,10 +35,7 @@
     <ClCompile Include="..\..\src\caffe\test\test_cluster_loss_layer.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\caffe\test\test_separate_loss_layer.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\src\caffe\test\test_matrix_inverse.cpp">
+    <ClCompile Include="..\..\src\caffe\test\test_dpp_loss_layer.cpp">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

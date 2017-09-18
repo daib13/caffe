@@ -57,6 +57,8 @@ void SeparateLossLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 template <typename Dtype>
 void SeparateLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
+	if (!propagate_down[0])
+		return;
 	const Dtype scale = top[0]->cpu_diff()[0] / N_ / (K_*K_ - K_);
 	const Dtype* x_data = bottom[0]->cpu_data();
 	const Dtype* loss_data = loss_.cpu_data();

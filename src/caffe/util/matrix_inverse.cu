@@ -24,6 +24,15 @@ __global__ void gpu_check_head_row(const int nthreads, const int D, const int ro
 	CUDA_KERNEL_LOOP(index, nthreads) {
 		nonzero_row_id[index] = row;
 		int idx = (index*D + row)*D + row;
+		Dtype pivot_var = input[idx];
+		for (int r = row + 1; r < D; ++r) {
+			idx += D;
+			if (abs(input[idx]) > abs(pivot_var)) {
+				nonzero_row_id[index] = r;
+				pivot_var = input[idx];
+			}
+		}
+		/*
 		while (abs(input[idx]) < 1e-12) {
 			++nonzero_row_id[index];
 			idx += D;
@@ -32,6 +41,7 @@ __global__ void gpu_check_head_row(const int nthreads, const int D, const int ro
 				break;
 			}
 		}
+		*/
 	}
 }
 
@@ -51,8 +61,11 @@ __global__ void gpu_switch_row(const int nthreads, const int D, const int row, c
 			output[idx1] = output[idx2];
 			output[idx2] = tmp;
 		}
-		if (d == row)
-			scale[n] = max(Dtype(1e-12), input[(n*D + row)*D + d]);
+		if (d == row) {
+			scale[n] = input[(n*D + row)*D + d];
+			if (abs(scale[n]) < Dtype(1e-12))
+				scale[n] = (scale[n] >= 0) ? Dtype(1e-12) : Dtype(-1e-12);
+		}
 	}
 }
 
@@ -66,7 +79,7 @@ __global__ void gpu_divide_row(const int nthreads, const int D, const int row, c
 		input[idx] /= scale[n];
 		output[idx] /= scale[n];
 		if (d == 0)
-			log_det[n] += log(scale[n]);
+			log_det[n] += log(abs(scale[n]));
 		row_scale[index] = input[(n*D + d)*D + row];
 	}
 }

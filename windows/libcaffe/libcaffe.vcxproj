@@ -122,6 +122,7 @@
     <ClCompile Include="..\..\src\caffe\layers\cudnn_tanh_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\data_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\deconv_layer.cpp" />
+    <ClCompile Include="..\..\src\caffe\layers\dpp_loss_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\dropout_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\dummy_data_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\duplicate_layer.cpp" />
@@ -235,6 +236,7 @@
     <ClInclude Include="..\..\include\caffe\layers\cudnn_tanh_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\data_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\deconv_layer.hpp" />
+    <ClInclude Include="..\..\include\caffe\layers\dpp_loss_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\dropout_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\dummy_data_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\duplicate_layer.hpp" />
@@ -377,6 +379,7 @@
   <ItemGroup>
     <CudaCompile Include="..\..\src\caffe\layers\box_annotator_ohem_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\cluster_loss_layer.cu" />
+    <CudaCompile Include="..\..\src\caffe\layers\dpp_loss_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\duplicate_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\kl_loss_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\log_probability_layer.cu" />

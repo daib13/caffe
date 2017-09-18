@@ -24,6 +24,15 @@ void cpu_check_head_row(const int N, const int D, const int row, const Dtype* in
 	for (int n = 0; n < N; ++n) {
 		nonzero_row_id[n] = row;
 		int idx = (n*D + row)*D + row;
+		Dtype pivot_var = input[idx];
+		for (int r = row + 1; r < D; ++r) {
+			idx += D;
+			if (abs(input[idx]) > abs(pivot_var)) {
+				nonzero_row_id[n] = r;
+				pivot_var = input[idx];
+			}
+		}
+		/*
 		while (abs(input[idx]) < 1e-12) {
 			++nonzero_row_id[n];
 			idx += D;
@@ -32,6 +41,7 @@ void cpu_check_head_row(const int N, const int D, const int row, const Dtype* in
 				break;
 			}
 		}
+		*/
 	}
 }
 
@@ -59,8 +69,10 @@ void cpu_divide_row(const int N, const int D, const int row,
 	Dtype* input, Dtype* output, Dtype* log_det) {
 	for (int n = 0; n < N; ++n) {
 		int idx = (n*D + row)*D;
-		Dtype scale = max(Dtype(1e-12), input[idx + row]);
-		log_det[n] += log(scale);
+		Dtype scale = input[idx + row];
+		if (abs(scale) < Dtype(1e-12))
+			scale = (scale >= 0) ? Dtype(1e-12) : Dtype(-1e-12);
+		log_det[n] += log(abs(scale));
 		for (int d = 0; d < D; ++d) {
 			input[idx] /= scale;
 			output[idx++] /= scale;
