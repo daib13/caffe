@@ -862,9 +862,11 @@ message LogProbabilityParameter {
   enum DistanceType {
     BERNOULLI = 0;
     GAUSSIAN = 1;
+    OPT_GAUSSIAN = 2;
   }
   optional DistanceType distance_type = 1 [default = BERNOULLI];
   optional float sigma = 2 [default = 1];
+  optional float epsilon = 3 [default = 0.01];
 }
 
 // Message that stores parameters used by LogLayer

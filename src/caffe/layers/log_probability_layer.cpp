@@ -21,9 +21,14 @@ void LogProbabilityLayer<Dtype>::LayerSetUp(
 	concat_layer_->SetUp(concat_layer_bottom_, concat_layer_top_);
 
 	distance_type_ = this->layer_param_.log_probability_param().distance_type();
-	sigma_ = max(Dtype(0.01), Dtype(this->layer_param_.log_probability_param().sigma()));
-	two_var_ = 2 * sigma_ * sigma_;
-	log_sigma_ = log(sigma_);
+	if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
+		sigma_ = max(Dtype(0.01), Dtype(this->layer_param_.log_probability_param().sigma()));
+		two_var_ = 2 * sigma_ * sigma_;
+		log_sigma_ = log(sigma_);
+	}
+	else if (distance_type_ == LogProbabilityParameter_DistanceType_OPT_GAUSSIAN) {
+		epsilon_ = this->layer_param_.log_probability_param().epsilon();
+	}
 }
 
 template <typename Dtype>
@@ -74,7 +79,20 @@ void LogProbabilityLayer<Dtype>::Forward_cpu(
 			int p_idx = n*K_ + k;
 			p_data[p_idx] = 0;
 			for (int d = 0; d < D_; ++d) {
-				p_dim_data[idx] = -pow(diff_data[idx], 2) / two_var_ - LOG_TWO_PI - log_sigma_;
+				p_dim_data[idx] = -pow(diff_data[idx], 2) / two_var_ - LOG_TWO_PI / Dtype(2) - log_sigma_;
+				p_data[p_idx] += p_dim_data[idx++];
+			}
+		}
+	}
+	else if (distance_type_ == LogProbabilityParameter_DistanceType_OPT_GAUSSIAN) {
+		Dtype* diff_data = p_dim_.mutable_cpu_diff();
+		caffe_sub<Dtype>(bottom[0]->count(), x_data, x_hat_data, diff_data);
+		for (int k = 0; k < K_; ++k)
+		for (int n = 0; n < N_; ++n) {
+			int p_idx = n*K_ + k;
+			p_data[p_idx] = 0;
+			for (int d = 0; d < D_; ++d) {
+				p_dim_data[idx] = -(LOG_TWO_PI + log(pow(diff_data[idx], 2) + epsilon_) + 1) / Dtype(2);
 				p_data[p_idx] += p_dim_data[idx++];
 			}
 		}
@@ -112,6 +130,17 @@ void LogProbabilityLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 				}
 			}
 		}
+		else if (distance_type_ == LogProbabilityParameter_DistanceType_OPT_GAUSSIAN) {
+			const Dtype* diff_data = p_dim_.cpu_diff();
+			for (int k = 0; k < K_; ++k)
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				for (int d = 0; d < D_; ++d) {
+					x_hat_diff[idx] = diff_data[idx] / (pow(diff_data[idx], 2) + epsilon_) * p_diff[p_idx];
+					++idx;
+				}
+			}
+		}
 	}
 	if (propagate_down[1]) {
 		Dtype* x_diff = x_duplicate_.mutable_cpu_diff();
@@ -134,6 +163,17 @@ void LogProbabilityLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 				int p_idx = n*K_ + k;
 				for (int d = 0; d < D_; ++d) {
 					x_diff[idx] = -2 * diff_data[idx] / two_var_ * p_diff[p_idx];
+					++idx;
+				}
+			}
+		}
+		else if (distance_type_ == LogProbabilityParameter_DistanceType_OPT_GAUSSIAN) {
+			const Dtype* diff_data = p_dim_.cpu_diff();
+			for (int k = 0; k < K_; ++k)
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				for (int d = 0; d < D_; ++d) {
+					x_diff[idx] = -diff_data[idx] / (pow(diff_data[idx], 2) + epsilon_) * p_diff[p_idx];
 					++idx;
 				}
 			}
