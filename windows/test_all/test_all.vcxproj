@@ -75,6 +75,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\src\caffe\test\test_caffe_main.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_cluster_loss_layer.cpp" />
+    <ClCompile Include="..\..\src\caffe\test\test_kl_subspace_loss_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_layer_factory.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_log_probability_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_protobuf.cpp" />

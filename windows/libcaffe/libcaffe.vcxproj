@@ -142,6 +142,7 @@
     <ClCompile Include="..\..\src\caffe\layers\inner_product_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\input_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\kl_loss_layer.cpp" />
+    <ClCompile Include="..\..\src\caffe\layers\kl_subspace_loss_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\log_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\log_probability_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\loss_layer.cpp" />
@@ -256,6 +257,7 @@
     <ClInclude Include="..\..\include\caffe\layers\inner_product_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\input_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\kl_loss_layer.hpp" />
+    <ClInclude Include="..\..\include\caffe\layers\kl_subspace_loss_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\log_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\log_probability_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\loss_layer.hpp" />
@@ -382,6 +384,7 @@
     <CudaCompile Include="..\..\src\caffe\layers\dpp_loss_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\duplicate_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\kl_loss_layer.cu" />
+    <CudaCompile Include="..\..\src\caffe\layers\kl_subspace_loss_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\log_probability_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\psroi_pooling_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\separate_loss_layer.cu" />
