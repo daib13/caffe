@@ -48,6 +48,11 @@ void LogProbabilityLayer<Dtype>::Reshape(
 	p_dim_shape.push_back(N_);
 	p_dim_shape.push_back(D_);
 	p_dim_.Reshape(p_dim_shape);
+
+	if (bottom.size() == 3) {
+		CHECK_EQ(bottom[2]->shape(0), K_) << "The num of sigma should equal to the number of cluster.";
+		CHECK_EQ(bottom[2]->count(1), D_) << "The dim of sigma should equal to the dim of samples.";
+	}
 }
 
 template <typename Dtype>
@@ -74,13 +79,30 @@ void LogProbabilityLayer<Dtype>::Forward_cpu(
 	else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
 		Dtype* diff_data = p_dim_.mutable_cpu_diff();
 		caffe_sub<Dtype>(bottom[0]->count(), x_data, x_hat_data, diff_data);
-		for (int k = 0; k < K_; ++k)
-		for (int n = 0; n < N_; ++n) {
-			int p_idx = n*K_ + k;
-			p_data[p_idx] = 0;
-			for (int d = 0; d < D_; ++d) {
-				p_dim_data[idx] = -pow(diff_data[idx], 2) / two_var_ - LOG_TWO_PI / Dtype(2) - log_sigma_;
-				p_data[p_idx] += p_dim_data[idx++];
+		if (bottom.size() == 2) {
+			for (int k = 0; k < K_; ++k)
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				p_data[p_idx] = 0;
+				for (int d = 0; d < D_; ++d) {
+					p_dim_data[idx] = -pow(diff_data[idx], 2) / two_var_ - LOG_TWO_PI / Dtype(2) - log_sigma_;
+					p_data[p_idx] += p_dim_data[idx++];
+				}
+			}
+		}
+		else if (bottom.size() == 3) {
+			const Dtype* sd_data = bottom[2]->cpu_data();
+			for (int k = 0; k < K_; ++k)
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				p_data[p_idx] = 0;
+				int sd_idx = k*D_;
+				for (int d = 0; d < D_; ++d) {
+					const Dtype safe_sd = max(Dtype(1e-6), sd_data[sd_idx++]);
+					p_dim_data[idx] = -pow(diff_data[idx] / safe_sd, 2) / Dtype(2)
+						- LOG_TWO_PI / Dtype(2) - log(safe_sd);
+					p_data[p_idx] += p_dim_data[idx++];
+				}
 			}
 		}
 	}
@@ -121,12 +143,27 @@ void LogProbabilityLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 		}
 		else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
 			const Dtype* diff_data = p_dim_.cpu_diff();
-			for (int k = 0; k < K_; ++k)
-			for (int n = 0; n < N_; ++n) {
-				int p_idx = n*K_ + k;
-				for (int d = 0; d < D_; ++d) {
-					x_hat_diff[idx] = 2 * diff_data[idx] / two_var_ * p_diff[p_idx];
-					++idx;
+			if (bottom.size() == 2) {
+				for (int k = 0; k < K_; ++k)
+				for (int n = 0; n < N_; ++n) {
+					int p_idx = n*K_ + k;
+					for (int d = 0; d < D_; ++d) {
+						x_hat_diff[idx] = 2 * diff_data[idx] / two_var_ * p_diff[p_idx];
+						++idx;
+					}
+				}
+			}
+			else if (bottom.size() == 3) {
+				const Dtype* sd_data = bottom[2]->cpu_data();
+				for (int k = 0; k < K_; ++k) {	
+					for (int n = 0; n < N_; ++n) {
+						int p_idx = n*K_ + k;
+						int sd_idx = k*D_;
+						for (int d = 0; d < D_; ++d) {
+							x_hat_diff[idx] = diff_data[idx] / pow(max(Dtype(1e-6), sd_data[sd_idx++]), 2) * p_diff[p_idx];
+							++idx;
+						}
+					}
 				}
 			}
 		}
@@ -158,12 +195,27 @@ void LogProbabilityLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 		}
 		else if (distance_type_ == LogProbabilityParameter_DistanceType_GAUSSIAN) {
 			const Dtype* diff_data = p_dim_.cpu_diff();
-			for (int k = 0; k < K_; ++k)
-			for (int n = 0; n < N_; ++n) {
-				int p_idx = n*K_ + k;
-				for (int d = 0; d < D_; ++d) {
-					x_diff[idx] = -2 * diff_data[idx] / two_var_ * p_diff[p_idx];
-					++idx;
+			if (bottom.size() == 2) {
+				for (int k = 0; k < K_; ++k)
+				for (int n = 0; n < N_; ++n) {
+					int p_idx = n*K_ + k;
+					for (int d = 0; d < D_; ++d) {
+						x_diff[idx] = -2 * diff_data[idx] / two_var_ * p_diff[p_idx];
+						++idx;
+					}
+				}
+			}
+			else if (bottom.size() == 3) {
+				const Dtype* sd_data = bottom[2]->cpu_data();
+				for (int k = 0; k < K_; ++k) {
+					for (int n = 0; n < N_; ++n) {
+						int p_idx = n*K_ + k;
+						int sd_idx = k*D_;
+						for (int d = 0; d < D_; ++d) {
+							x_diff[idx] = -diff_data[idx] / pow(max(Dtype(1e-6), sd_data[sd_idx++]), 2) * p_diff[p_idx];
+							++idx;
+						}
+					}
 				}
 			}
 		}
@@ -182,6 +234,23 @@ void LogProbabilityLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 		caffe_set<Dtype>(bottom[1]->count(), Dtype(0), bottom_diff);
 		for (int k = 0; k < K_; ++k)
 			caffe_cpu_axpby<Dtype>(N_*D_, Dtype(1), x_diff + k*N_*D_, Dtype(1), bottom_diff);
+	}
+	if (bottom.size() == 3 && propagate_down[2]) {
+		const Dtype* diff_data = p_dim_.cpu_diff();
+		const Dtype* sd_data = bottom[2]->cpu_data();
+		Dtype* sd_diff = bottom[2]->mutable_cpu_diff();
+		for (int k = 0; k < K_; ++k)
+		for (int d = 0; d < D_; ++d) {
+			int sd_idx = k*D_ + d;
+			sd_diff[sd_idx] = 0;
+			const Dtype safe_sd = max(Dtype(1e-6), sd_data[sd_idx]);
+			for (int n = 0; n < N_; ++n) {
+				int p_idx = n*K_ + k;
+				int diff_idx = (k*N_ + n)*D_ + d;
+				sd_diff[sd_idx] += p_diff[p_idx] * (pow(diff_data[diff_idx] / safe_sd, 2) - 1);
+			}
+			sd_diff[sd_idx] /= safe_sd;
+		}
 	}
 } 
 

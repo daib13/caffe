@@ -28,7 +28,9 @@ class LogProbabilityLayer : public Layer<Dtype> {
       const vector<Blob<Dtype>*>& top);
 
   virtual inline const char* type() const { return "LogProbability"; }
-  virtual inline int ExactNumBottomBlobs() const { return 2; }
+  virtual inline int ExactNumBottomBlobs() const { return -1; }
+  virtual inline int MinNumBottomBlobs() const { return 2; }
+  virtual inline int MaxNumBottomBlobs() const { return 3; }
   virtual inline int ExactNumTopBlobs() const { return 1; }
 
  protected:
