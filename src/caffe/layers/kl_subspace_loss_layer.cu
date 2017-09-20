@@ -68,6 +68,14 @@ __global__ void KLSubspaceForwardLoss(const int nthreads, const Dtype* logp_data
 }
 
 template <typename Dtype>
+__global__ void KLSubspaceForwardPosterior(const int nthreads, const int K,
+	const Dtype* res_q_data, const Dtype* sum_res_q_data, Dtype* posterior) {
+	CUDA_KERNEL_LOOP(index, nthreads) {
+		posterior[index] = res_q_data[index] / sum_res_q_data[index / K];
+	}
+}
+
+template <typename Dtype>
 void KLSubspaceLossLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
 	const vector<Blob<Dtype>*>& top) {
 	const Dtype* z_data = bottom[0]->gpu_data();
@@ -112,6 +120,12 @@ void KLSubspaceLossLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
 	for (int n = 0; n < N_; ++n)
 		loss += item_loss[n];
 	top[0]->mutable_cpu_data()[0] = loss / N_;
+
+	if (top.size() == 2) {
+		Dtype* posterior = top[1]->mutable_gpu_data();
+		KLSubspaceForwardPosterior<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_,
+			res_q_data, sum_res_q_data, posterior);
+	}
 }
 
 template <typename Dtype>

@@ -6,6 +6,17 @@
 namespace caffe {
 
 template <typename Dtype>
+void KLSubspaceLossLayer<Dtype>::LayerSetUp(
+    const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
+  // LossLayers have a non-zero (1) loss by default.
+  if (this->layer_param_.loss_weight_size() == 0) {
+    this->layer_param_.add_loss_weight(Dtype(1));
+	if (top.size() == 2)
+		this->layer_param_.add_loss_weight(Dtype(0));
+  }
+}
+
+template <typename Dtype>
 void KLSubspaceLossLayer<Dtype>::Reshape(
 	const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
 	vector<int> loss_shape(0);  // Loss layers output a scalar; 0 axes.
@@ -50,6 +61,9 @@ void KLSubspaceLossLayer<Dtype>::Reshape(
 	gt_sd_shape.push_back(K_);
 	gt_sd_shape.push_back(D_);
 	gt_sd_.Reshape(gt_sd_shape);
+
+	if (top.size() == 2)
+		top[1]->Reshape(logq_shape);
 }
 
 template <typename Dtype>
@@ -114,6 +128,16 @@ void KLSubspaceLossLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 	}
 
 	top[0]->mutable_cpu_data()[0] = loss / N_;
+
+	if (top.size() == 2) {
+		Dtype* posterior_data = top[1]->mutable_cpu_data();
+		int idx = 0;
+		for (int n = 0; n < N_; ++n)
+		for (int k = 0; k < K_; ++k) {
+			posterior_data[idx] = res_q_data[idx] / sum_res_q_data[n];
+			++idx;
+		}
+	}
 }
 
 template <typename Dtype>

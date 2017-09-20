@@ -16,6 +16,8 @@ class KLSubspaceLossLayer : public LossLayer<Dtype> {
  public:
   explicit KLSubspaceLossLayer(const LayerParameter& param)
       : LossLayer<Dtype>(param) {}
+  virtual void LayerSetUp(
+	  const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top);
   virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 
@@ -25,7 +27,9 @@ class KLSubspaceLossLayer : public LossLayer<Dtype> {
   }
 
   virtual inline int ExactNumBottomBlobs() const { return 5; }
-  virtual inline int ExactNumTopBlobs() const { return 1; }
+  virtual inline int ExactNumTopBlobs() const { return -1; }
+  virtual inline int MinNumTopBlobs() const { return 1; }
+  virtual inline int MaxNumTopBlobs() const { return 2; }
 
  protected:
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
