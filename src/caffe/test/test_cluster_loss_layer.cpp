@@ -23,6 +23,7 @@ class ClusterLossLayerTest : public MultiDeviceTest<TypeParam> {
   ClusterLossLayerTest()
       : blob_bottom1_(new Blob<Dtype>(2, 5, 1, 1)),
 	  blob_bottom2_(new Blob<Dtype>(5, 1, 1, 1)),
+	  blob_bottom_label_(new Blob<Dtype>(2, 1, 1, 1)),
         blob_top_(new Blob<Dtype>()) {
     // fill the values
     FillerParameter filler_param;
@@ -32,6 +33,9 @@ class ClusterLossLayerTest : public MultiDeviceTest<TypeParam> {
 	GaussianFiller<Dtype> filler2(filler_param);
 	filler2.Fill(this->blob_bottom1_);
 	filler1.Fill(this->blob_bottom2_);
+	for (int i = 0; i < blob_bottom_label_->count(); ++i) {
+		blob_bottom_label_->mutable_cpu_data()[i] = caffe_rng_rand() % 5;
+	}
 	blob_bottom_vec_.push_back(blob_bottom1_);
 	blob_bottom_vec_.push_back(blob_bottom2_);
     blob_top_vec_.push_back(blob_top_);
@@ -39,10 +43,12 @@ class ClusterLossLayerTest : public MultiDeviceTest<TypeParam> {
   virtual ~ClusterLossLayerTest() {
     delete blob_bottom1_;
 	delete blob_bottom2_;
+	delete blob_bottom_label_;
     delete blob_top_;
   }
   Blob<Dtype>* const blob_bottom1_;
   Blob<Dtype>* const blob_bottom2_;
+  Blob<Dtype>* const blob_bottom_label_;
   Blob<Dtype>* const blob_top_;
   vector<Blob<Dtype>*> blob_bottom_vec_;
   vector<Blob<Dtype>*> blob_top_vec_;
@@ -69,6 +75,27 @@ TYPED_TEST(ClusterLossLayerTest, TestGradient) {
   } else {
     LOG(ERROR) << "Skipping test due to old architecture.";
   }
+}
+
+TYPED_TEST(ClusterLossLayerTest, TestGradient2) {
+	typedef typename TypeParam::Dtype Dtype;
+	bool IS_VALID_CUDA = false;
+#ifndef CPU_ONLY
+	IS_VALID_CUDA = CAFFE_TEST_CUDA_PROP.major >= 2;
+#endif
+	if (Caffe::mode() == Caffe::CPU ||
+		sizeof(Dtype) == 4 || IS_VALID_CUDA) {
+		LayerParameter layer_param;
+		blob_bottom_vec_.clear();
+		blob_bottom_vec_.push_back(blob_bottom1_);
+		blob_bottom_vec_.push_back(blob_bottom_label_);
+		layer_param.add_loss_weight(1.2);
+		ClusterLossLayer<Dtype> layer(layer_param);
+
+		GradientChecker<Dtype> checker(1e-2, 1e-2, 1701);
+		checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
+			this->blob_top_vec_, 0);
+	}
 }
 
 }  // namespace caffe

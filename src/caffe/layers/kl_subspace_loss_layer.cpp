@@ -89,10 +89,10 @@ void KLSubspaceLossLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 
 	const Dtype noise_sd = bottom[4]->cpu_data()[0];
 	Dtype* sd_gt = gt_sd_.mutable_cpu_data();
-	caffe_set<Dtype>(K_*D_, Dtype(1), sd_gt);
+	caffe_set<Dtype>(K_*D_, noise_sd, sd_gt);
 	const int dim_per_cluster = D_ / K_;
 	for (int d = 0; d < D_; ++d) {
-		sd_gt[d / dim_per_cluster*D_ + d] += noise_sd;
+		sd_gt[d / dim_per_cluster*D_ + d]++;
 	}
 
 	const Dtype* prior_data = bottom[3]->cpu_data();
@@ -213,9 +213,9 @@ void KLSubspaceLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 			}
 		}
 		Dtype noise_sd_diff = 0;
-		const int dim_per_cluster = D_ / K_;
-		for (int d = 0; d < D_; ++d) {
-			noise_sd_diff += sd_gt_diff[d / dim_per_cluster*D_ + d];
+		const int count = K_*D_;
+		for (int i = 0; i < count; ++i) {
+			noise_sd_diff += sd_gt_diff[i];
 		}
 		bottom[4]->mutable_cpu_diff()[0] = noise_sd_diff;
 	}

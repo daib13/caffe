@@ -45,25 +45,42 @@ __global__ void ClusterLossForwardItemLoss(const int nthreads, const int K,
 }
 
 template <typename Dtype>
+__global__ void ClusterLossForwardItemLossWithLabel(const int nthreads, const int K,
+	const Dtype* log_posterior_data, const Dtype* label, Dtype* item_loss_data) {
+	CUDA_KERNEL_LOOP(index, nthreads) {
+		const int label_value = static_cast<int>(label[index]);
+		item_loss_data[index] = -log_posterior_data[index*K + label_value];
+	}
+}
+
+template <typename Dtype>
 void ClusterLossLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
 	const Dtype* log_posterior_data = bottom[0]->gpu_data();
-	const Dtype* prior_data = bottom[1]->gpu_data();
-	Dtype* log_joint_data = log_joint_.mutable_gpu_data();
-	ClusterLossForwardLogJoint<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_,
-		log_posterior_data, prior_data, log_joint_data);
-
-	Dtype* log_joint_max_data = log_joint_max_.mutable_gpu_data();
-	ClusterLossForwardLogJointMax<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_,
-		log_joint_data, log_joint_max_data);
-
-	Dtype* joint_res_data = joint_res_.mutable_gpu_data();
-	ClusterLossForwardJointRes<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_,
-		log_joint_data, log_joint_max_data, joint_res_data);
-
 	Dtype* item_loss_data = item_loss_.mutable_gpu_data();
-	ClusterLossForwardItemLoss<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_,
-		log_joint_max_data, joint_res_data, item_loss_data);
+
+	if (bottom[1]->count() == K_) {
+		const Dtype* prior_data = bottom[1]->gpu_data();
+		Dtype* log_joint_data = log_joint_.mutable_gpu_data();
+		ClusterLossForwardLogJoint<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_,
+			log_posterior_data, prior_data, log_joint_data);
+
+		Dtype* log_joint_max_data = log_joint_max_.mutable_gpu_data();
+		ClusterLossForwardLogJointMax<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_,
+			log_joint_data, log_joint_max_data);
+
+		Dtype* joint_res_data = joint_res_.mutable_gpu_data();
+		ClusterLossForwardJointRes<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_,
+			log_joint_data, log_joint_max_data, joint_res_data);
+
+		ClusterLossForwardItemLoss<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_,
+			log_joint_max_data, joint_res_data, item_loss_data);
+	}
+	else {
+		const Dtype* label = bottom[1]->gpu_data();
+		ClusterLossForwardItemLossWithLabel<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_,
+			log_posterior_data, label, item_loss_data);
+	}
 
 	item_loss_data = item_loss_.mutable_cpu_data();
 	Dtype loss = 0;
@@ -106,28 +123,50 @@ __global__ void ClusterLossBackwardPrior(const int nthreads, const int N,
 }
 
 template <typename Dtype>
+__global__ void ClusterLossBackwardLogPosterior(const int nthreads, const int K,
+	const Dtype* label, const Dtype scale, Dtype* log_posterior_diff) {
+	CUDA_KERNEL_LOOP(index, nthreads) {
+		const int label_value = static_cast<int>(label[index]);
+		log_posterior_diff[index * K + label_value] = -scale;
+	}
+}
+
+template <typename Dtype>
 void ClusterLossLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
 	if ((!propagate_down[0]) && (!propagate_down[1]))
 		return;
 
-	const Dtype* joint_res_data = joint_res_.gpu_data();
 	const Dtype scale = top[0]->cpu_diff()[0] / N_;
-	Dtype* joint_res_sum_data = item_loss_.mutable_gpu_diff();
-	ClusterLossBackwardJointResSum<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_,
-		joint_res_data, joint_res_sum_data);
+	if (bottom[1]->count() == K_) {
+		const Dtype* joint_res_data = joint_res_.gpu_data();
+		Dtype* joint_res_sum_data = item_loss_.mutable_gpu_diff();
+		ClusterLossBackwardJointResSum<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_,
+			joint_res_data, joint_res_sum_data);
 
-	Dtype* log_joint_diff = log_joint_.mutable_gpu_diff();
-	ClusterLossBackwardLogJoint<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_, scale,
-		joint_res_data, joint_res_sum_data, log_joint_diff);
+		Dtype* log_joint_diff = log_joint_.mutable_gpu_diff();
+		ClusterLossBackwardLogJoint<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_, scale,
+			joint_res_data, joint_res_sum_data, log_joint_diff);
 
-	if (propagate_down[0])
-		caffe_copy<Dtype>(bottom[0]->count(), log_joint_diff, bottom[0]->mutable_gpu_diff());
-	if (propagate_down[1]) {
-		const Dtype* bottom1_data = bottom[1]->gpu_data();
-		Dtype* bottom1_diff = bottom[1]->mutable_gpu_diff();
-		ClusterLossBackwardPrior<Dtype><<<CAFFE_GET_BLOCKS(K_), CAFFE_CUDA_NUM_THREADS>>>(K_, N_,
-			log_joint_diff, bottom1_data, bottom1_diff);
+		if (propagate_down[0])
+			caffe_copy<Dtype>(bottom[0]->count(), log_joint_diff, bottom[0]->mutable_gpu_diff());
+		if (propagate_down[1]) {
+			const Dtype* bottom1_data = bottom[1]->gpu_data();
+			Dtype* bottom1_diff = bottom[1]->mutable_gpu_diff();
+			ClusterLossBackwardPrior<Dtype><<<CAFFE_GET_BLOCKS(K_), CAFFE_CUDA_NUM_THREADS>>>(K_, N_,
+				log_joint_diff, bottom1_data, bottom1_diff);
+		}
+	}
+	else {
+		if (propagate_down[0]) {
+			Dtype* log_posterior_diff = bottom[0]->mutable_gpu_diff();
+			caffe_gpu_set<Dtype>(bottom[0]->count(), Dtype(0), log_posterior_diff);
+			const Dtype* label = bottom[1]->gpu_data();
+			ClusterLossBackwardLogPosterior<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_,
+				label, scale, log_posterior_diff);
+		}
+		if (propagate_down[1])
+			caffe_gpu_set<Dtype>(bottom[1]->count(), Dtype(0), bottom[1]->mutable_gpu_diff());
 	}
 }
 
