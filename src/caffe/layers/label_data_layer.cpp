@@ -57,6 +57,7 @@ void LabelDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 
 	// datum scales
 	for (int item_id = 0; item_id < batch_size; ++item_id) {
+		prefetch_data[item_id] = label_[label_id_++];
 		if (label_id_ >= label_.size()) {
 			// We have reached the end. Restart from the first.
 			DLOG(INFO) << "Restarting data prefetching from start.";
