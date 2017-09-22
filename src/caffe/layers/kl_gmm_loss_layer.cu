@@ -19,7 +19,7 @@ template <typename Dtype>
 __global__ void KLGMMForwardLogPDim(const int nthreads, 
 	const Dtype* z_data, const Dtype* mu_z_data, const Dtype* sd_z_data, Dtype* logp_dim_data) {
 	CUDA_KERNEL_LOOP(index, nthreads) {
-		const Dtype safe_sd = max(Dtype(1e-6), sd_z_data[index]);
+		const Dtype safe_sd = max(Dtype(1e-12), sd_z_data[index]);
 		logp_dim_data[index] = (-pow((z_data[index] - mu_z_data[index]) / safe_sd, 2) - LOG_TWO_PI) / Dtype(2) 
 			- log(safe_sd);
 	}
@@ -32,7 +32,7 @@ __global__ void KLGMMForwardLogQDim(const int nthreads, const int K, const int D
 		int d = index % D;
 		int k = index / D % K;
 		int n = index / D / K;
-		const Dtype safe_sd = max(Dtype(1e-6), sd_c_data[k*D + d]);
+		const Dtype safe_sd = max(Dtype(1e-12), sd_c_data[k*D + d]);
 		logq_dim_data[index] = (-pow((z_data[n*D + d] - mu_c_data[k*D + d]) / safe_sd, 2) - LOG_TWO_PI) / Dtype(2) 
 			- log(safe_sd);
 	}
@@ -45,7 +45,7 @@ __global__ void KLGMMForwardLogQMax(const int nthreads, const int K,
 		logq_max_data[index] = -INT_MAX;
 		int idx = index * K;
 		for (int k = 0; k < K; ++k) {
-			logq_data[idx] += log(max(Dtype(1e-6), prior_data[k]));
+			logq_data[idx] += log(max(Dtype(1e-12), prior_data[k]));
 			logq_max_data[index] = max(logq_max_data[index], logq_data[idx++]);
 		}
 	}
@@ -106,7 +106,7 @@ void KLGMMLossLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
 	KLGMMForwardResQ<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_,
 		logq_data, logq_max_data, resq_data);
 
-	Dtype* resq_sum_data = resq_.mutable_gpu_data();
+	Dtype* resq_sum_data = resq_sum_.mutable_gpu_data();
 	KLGMMForwardSum<Dtype><<<CAFFE_GET_BLOCKS(N_), CAFFE_CUDA_NUM_THREADS>>>(N_, K_, resq_data, resq_sum_data);
 
 	Dtype* loss_data = item_loss_.mutable_gpu_data();
@@ -121,7 +121,7 @@ void KLGMMLossLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
 
 	Dtype* posterior = logq_.mutable_gpu_diff();
 	KLGMMForwardPosterior<Dtype><<<CAFFE_GET_BLOCKS(N_*K_), CAFFE_CUDA_NUM_THREADS>>>(N_*K_, K_,
-		resq_data, resq_sum_data);
+		resq_data, resq_sum_data, posterior);
 	if (top.size() == 2)
 		caffe_copy<Dtype>(N_*K_, posterior, top[1]->mutable_cpu_data());
 }
@@ -133,12 +133,12 @@ __global__ void KLGMMBackwardZ(const int nthreads, const int K, const int D, con
 	CUDA_KERNEL_LOOP(index, nthreads) {
 		int n = index / D;
 		int d = index % D;
-		Dtype safe_sd = max(Dtype(1e-6), sd_z_data[index]);
+		Dtype safe_sd = max(Dtype(1e-12), sd_z_data[index]);
 		z_diff[index] = logp_diff[n] * (mu_z_data[index] - z_data[index]) / pow(safe_sd, 2);
 		for (int k = 0; k < K; ++k) {
 			int q_idx = n*K + k;
 			int c_idx = k*D + d;
-			safe_sd = max(Dtype(1e-6), sd_c_data[c_idx]);
+			safe_sd = max(Dtype(1e-12), sd_c_data[c_idx]);
 			z_diff[index] += logq_diff[q_idx] * (mu_c_data[c_idx] - z_data[index]) / pow(safe_sd, 2);
 		}
 	}
@@ -148,7 +148,7 @@ template <typename Dtype>
 __global__ void KLGMMBackwardMuZ(const int nthreads, const int D, const Dtype* logp_diff,
 	const Dtype* z_data, const Dtype* mu_z_data, const Dtype* sd_z_data, Dtype* mu_z_diff) {
 	CUDA_KERNEL_LOOP(index, nthreads) {
-		Dtype safe_sd = max(Dtype(1e-6), sd_z_data[index]);
+		Dtype safe_sd = max(Dtype(1e-12), sd_z_data[index]);
 		mu_z_diff[index] = logp_diff[index/D] * (z_data[index] - mu_z_data[index]) / pow(safe_sd, 2);
 	}
 }
@@ -157,7 +157,7 @@ template <typename Dtype>
 __global__ void KLGMMBackwardSdZ(const int nthreads, const int D, const Dtype* logp_diff,
 	const Dtype* z_data, const Dtype* mu_z_data, const Dtype* sd_z_data, Dtype* sd_z_diff) {
 	CUDA_KERNEL_LOOP(index, nthreads) {
-		Dtype safe_sd = max(Dtype(1e-6), sd_z_data[index]);
+		Dtype safe_sd = max(Dtype(1e-12), sd_z_data[index]);
 		sd_z_diff[index] = logp_diff[index/D] * (pow((mu_z_data[index] - z_data[index]) / safe_sd, 2) - 1) / safe_sd;
 	}
 }
@@ -169,7 +169,7 @@ __global__ void KLGMMBackwardPrior(const int nthreads, const int N, const Dtype*
 		prior_diff[index] = 0;
 		for (int n = 0; n < N; ++n)
 			prior_diff[index] += logq_diff[n*nthreads + index];
-		prior_diff[index] /= max(Dtype(1e-6), prior_data[index]);
+		prior_diff[index] /= max(Dtype(1e-12), prior_data[index]);
 	}
 }
 
@@ -181,7 +181,7 @@ __global__ void KLGMMBackwardMuC(const int nthreads, const int N, const int K, c
 		int k = index / D;
 		int d = index % D;
 		mu_c_diff[index] = Dtype(0);
-		const Dtype safe_sd = max(Dtype(1e-6), sd_c_data[index]);
+		const Dtype safe_sd = max(Dtype(1e-12), sd_c_data[index]);
 		const Dtype safe_sd_square = pow(safe_sd, 2);
 		for (int n = 0; n < N; ++n) {
 			mu_c_diff[index] += logq_diff[n*K + k] * (z_data[n*D + d] - mu_c_data[index]) / safe_sd_square;
@@ -197,7 +197,7 @@ __global__ void KLGMMBackwardSdC(const int nthreads, const int N, const int K, c
 		int k = index / D;
 		int d = index % D;
 		sd_c_diff[index] = Dtype(0);
-		const Dtype safe_sd = max(Dtype(1e-6), sd_c_data[index]);
+		const Dtype safe_sd = max(Dtype(1e-12), sd_c_data[index]);
 		for (int n = 0; n < N; ++n) {
 			sd_c_diff[index] += logq_diff[n*K + k]
 				* (pow((z_data[n*D + d] - mu_c_data[index]) / safe_sd, 2) - 1) / safe_sd;

@@ -58,6 +58,7 @@ void KLGMMLossLayer<Dtype>::Reshape(
 	logq_max_.Reshape(vector<int>(1, N_));
 	resq_.Reshape(logq_shape);
 	resq_sum_.Reshape(vector<int>(1, N_));
+	item_loss_.Reshape(vector<int>(1, N_));
 	
 	if (top.size() == 2)
 		top[1]->Reshape(logq_shape);
@@ -78,7 +79,7 @@ void KLGMMLossLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 	for (int n = 0; n < N_; ++n) {
 		logp_data[n] = 0;
 		for (int d = 0; d < D_; ++d) {
-			const Dtype safe_sd = max(Dtype(1e-6), sd_z_data[idx]);
+			const Dtype safe_sd = max(Dtype(1e-12), sd_z_data[idx]);
 			logp_dim_data[idx] = (-pow((z_data[idx] - mu_z_data[idx]) / safe_sd, 2) - LOG_TWO_PI) / Dtype(2) - log(safe_sd);
 			logp_data[n] += logp_dim_data[idx++];
 		}
@@ -93,16 +94,16 @@ void KLGMMLossLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 	Dtype* logq_data = logq_.mutable_cpu_data();
 	Dtype* logq_max_data = logq_max_.mutable_cpu_data();
 	Dtype* resq_data = resq_.mutable_cpu_data();
-	Dtype* resq_sum_data = resq_.mutable_cpu_data();
+	Dtype* resq_sum_data = resq_sum_.mutable_cpu_data();
 	for (int n = 0; n < N_; ++n) {
 		logq_max_data[n] = -INT_MAX;
 		for (int k = 0; k < K_; ++k) {
 			int q_idx = n*K_ + k;
-			logq_data[q_idx] = log(max(Dtype(1e-6), prior_data[k]));
+			logq_data[q_idx] = log(max(Dtype(1e-12), prior_data[k]));
 			idx = q_idx*D_;
 			for (int d = 0; d < D_; ++d) {
 				int c_idx = k*D_ + d;
-				const Dtype safe_sd = max(Dtype(1e-6), sd_c_data[c_idx]);
+				const Dtype safe_sd = max(Dtype(1e-12), sd_c_data[c_idx]);
 				logq_dim_data[idx] = (-pow((z_data[n*D_ + d] - mu_c_data[c_idx]) / safe_sd, 2) - LOG_TWO_PI) / Dtype(2) - log(safe_sd);
 				logq_data[q_idx] += logq_dim_data[idx++];
 			}
@@ -152,12 +153,12 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 		int z_idx = 0;
 		for (int n = 0; n < N_; ++n) 
 		for (int d = 0; d < D_; ++d) {
-			Dtype safe_sd = max(Dtype(1e-6), sd_z_data[z_idx]);
+			Dtype safe_sd = max(Dtype(1e-12), sd_z_data[z_idx]);
 			z_diff[z_idx] = logp_diff[n] * (mu_z_data[z_idx] - z_data[z_idx]) / pow(safe_sd, 2);
 			for (int k = 0; k < K_; ++k) {
 				int q_idx = n*K_ + k;
 				int c_idx = k*D_ + d;
-				safe_sd = max(Dtype(1e-6), sd_c_data[c_idx]);
+				safe_sd = max(Dtype(1e-12), sd_c_data[c_idx]);
 				z_diff[z_idx] += logq_diff[q_idx] * (mu_c_data[c_idx] - z_data[z_idx]) / pow(safe_sd, 2);
 			}
 			++z_idx;
@@ -168,7 +169,7 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 		int z_idx = 0;
 		for (int n = 0; n < N_; ++n)
 		for (int d = 0; d < D_; ++d) {
-			Dtype safe_sd = max(Dtype(1e-6), sd_z_data[z_idx]);
+			Dtype safe_sd = max(Dtype(1e-12), sd_z_data[z_idx]);
 			mu_z_diff[z_idx] = logp_diff[n] * (z_data[z_idx] - mu_z_data[z_idx]) / pow(safe_sd, 2);
 			++z_idx;
 		}
@@ -178,7 +179,7 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 		int z_idx = 0;
 		for (int n = 0; n < N_; ++n)
 		for (int d = 0; d < D_; ++d) {
-			Dtype safe_sd = max(Dtype(1e-6), sd_z_data[z_idx]);
+			Dtype safe_sd = max(Dtype(1e-12), sd_z_data[z_idx]);
 			sd_z_diff[z_idx] = logp_diff[n] * (pow((mu_z_data[z_idx] - z_data[z_idx]) / safe_sd, 2) - 1) / safe_sd;
 			++z_idx;
 		}
@@ -189,7 +190,7 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 			prior_diff[k] = 0;
 			for (int n = 0; n < N_; ++n)
 				prior_diff[k] += logq_diff[n*K_ + k];
-			prior_diff[k] /= max(Dtype(1e-6), prior_data[k]);
+			prior_diff[k] /= max(Dtype(1e-12), prior_data[k]);
 		}
 	}
 	if (propagate_down[4]) {
@@ -198,7 +199,7 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 		for (int k = 0; k < K_; ++k)
 		for (int d = 0; d < D_; ++d) {
 			mu_c_diff[c_idx] = Dtype(0);
-			const Dtype safe_sd = max(Dtype(1e-6), sd_c_data[c_idx]);
+			const Dtype safe_sd = max(Dtype(1e-12), sd_c_data[c_idx]);
 			const Dtype safe_sd_square = pow(safe_sd, 2);
 			for (int n = 0; n < N_; ++n) {
 				mu_c_diff[c_idx] += logq_diff[n*K_ + k] * (z_data[n*D_ + d] - mu_c_data[c_idx]) / safe_sd_square;
@@ -212,7 +213,7 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 		for (int k = 0; k < K_; ++k)
 		for (int d = 0; d < D_; ++d) {
 			sd_c_diff[c_idx] = Dtype(0);
-			const Dtype safe_sd = max(Dtype(1e-6), sd_c_data[c_idx]);
+			const Dtype safe_sd = max(Dtype(1e-12), sd_c_data[c_idx]);
 			for (int n = 0; n < N_; ++n) {
 				sd_c_diff[c_idx] += logq_diff[n*K_ + k]
 					* (pow((z_data[n*D_ + d] - mu_c_data[c_idx]) / safe_sd, 2) - 1) / safe_sd;
