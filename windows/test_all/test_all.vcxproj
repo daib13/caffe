@@ -79,6 +79,7 @@
     <ClCompile Include="..\..\src\caffe\test\test_layer_factory.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_log_probability_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_protobuf.cpp" />
+    <ClCompile Include="..\..\src\caffe\test\test_self_assign_loss_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_syncedmem.cpp" />
     <ClCompile Include="..\..\src\caffe\test\test_util_blas.cpp" />
     <ClCompile Include="..\..\src\gtest\gtest-all.cpp" />

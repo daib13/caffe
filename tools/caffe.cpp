@@ -54,6 +54,9 @@ DEFINE_string(sigint_effect, "stop",
 DEFINE_string(sighup_effect, "snapshot",
              "Optional; action to take when a SIGHUP signal is received: "
              "snapshot, stop or none.");
+DEFINE_string(param_name, "", "The name list of parameters (separated by comma)");
+DEFINE_string(blob_name, "", "The name list of blobs (separated by comma)");
+DEFINE_string(output_file, "", "The output file list (separated by comma)");
 
 // A simple registry for caffe commands.
 typedef int (*BrewFunction)();
@@ -421,6 +424,147 @@ int time() {
   return 0;
 }
 RegisterBrewFunction(time);
+
+int parameter() {
+
+	CHECK_GT(FLAGS_model.size(), 0) << "Need a model definition.";
+	CHECK_GT(FLAGS_weights.size(), 0) << "Need a weight.";
+
+	vector<string> stages = get_stages_from_flags();
+
+	// Set device id and mode
+	vector<int> gpus;
+	get_gpus(&gpus);
+	if (gpus.size() != 0) {
+		LOG(INFO) << "Use GPU with device ID " << gpus[0];
+#ifndef CPU_ONLY
+		cudaDeviceProp device_prop;
+		cudaGetDeviceProperties(&device_prop, gpus[0]);
+		LOG(INFO) << "GPU device name: " << device_prop.name;
+#endif
+		Caffe::SetDevice(gpus[0]);
+		Caffe::set_mode(Caffe::GPU);
+	}
+	else {
+		LOG(INFO) << "Use CPU.";
+		Caffe::set_mode(Caffe::CPU);
+	}
+	// Instantiate the caffe net.
+	Net<float> caffe_net(FLAGS_model, caffe::TEST, FLAGS_level, &stages);
+	caffe_net.CopyTrainedLayersFrom(FLAGS_weights);
+
+	vector<string> param_names;
+	vector<string> param_files;
+	boost::split(param_names, FLAGS_param_name, boost::is_any_of(","));
+	boost::split(param_files, FLAGS_output_file, boost::is_any_of(","));
+	CHECK_EQ(param_names.size(), param_files.size()) << "The number of parameters and output files should be the same.";
+
+	const vector<shared_ptr<Blob<float> > > params = caffe_net.params();
+	const std::map<string, int> param_names_index = caffe_net.param_names_index();
+	const int num_batch = 1;
+	for (int i = 0; i < param_names.size(); ++i) {
+		std::map<string, int>::const_iterator iter = param_names_index.find(param_names[i]);
+		if (iter == param_names_index.end()) {
+			LOG(INFO) << "No parameter named " << param_names[i] << ".";
+			continue;
+		}
+		const shared_ptr<Blob<float> > param = params[iter->second];
+		FILE* fout = fopen(param_files[i].c_str(), "wb");
+		fwrite(&num_batch, sizeof(int), 1, fout);
+		const int num_axes = param->num_axes();
+		fwrite(&num_axes, sizeof(int), 1, fout);
+		for (int j = 0; j < num_axes; ++j) {
+			int dim = param->shape(j);
+			fwrite(&dim, sizeof(int), 1, fout);
+		}
+		fwrite(param->cpu_data(), sizeof(float), param->count(), fout);
+		fclose(fout);
+	}
+
+	return 0;
+}
+RegisterBrewFunction(parameter);
+
+int gradient() {
+	CHECK_GT(FLAGS_model.size(), 0) << "Need a model definition.";
+	CHECK_GT(FLAGS_weights.size(), 0) << "Need a weight.";
+
+	vector<string> stages = get_stages_from_flags();
+
+	// Set device id and mode
+	vector<int> gpus;
+	get_gpus(&gpus);
+	if (gpus.size() != 0) {
+		LOG(INFO) << "Use GPU with device ID " << gpus[0];
+#ifndef CPU_ONLY
+		cudaDeviceProp device_prop;
+		cudaGetDeviceProperties(&device_prop, gpus[0]);
+		LOG(INFO) << "GPU device name: " << device_prop.name;
+#endif
+		Caffe::SetDevice(gpus[0]);
+		Caffe::set_mode(Caffe::GPU);
+	}
+	else {
+		LOG(INFO) << "Use CPU.";
+		Caffe::set_mode(Caffe::CPU);
+	}
+	// Instantiate the caffe net.
+	Net<float> caffe_net(FLAGS_model, caffe::TEST, FLAGS_level, &stages);
+	caffe_net.CopyTrainedLayersFrom(FLAGS_weights);
+	caffe_net.ForwardBackward();
+
+	vector<string> param_names, blob_names;
+	vector<string> param_files, blob_files, all_files;
+	boost::split(param_names, FLAGS_param_name, boost::is_any_of(","));
+	boost::split(blob_names, FLAGS_blob_name, boost::is_any_of(","));
+	boost::split(all_files, FLAGS_output_file, boost::is_any_of(","));
+	CHECK_EQ(param_names.size() + blob_names.size(), all_files.size()) << "The number of output files should be the sum of the param names and blob names.";
+	for (int i = 0; i < param_names.size(); ++i)
+		param_files.push_back(all_files[i]);
+	for (int i = 0; i < blob_names.size(); ++i)
+		blob_files.push_back(all_files[i + param_names.size()]);
+
+	const vector<shared_ptr<Blob<float> > > params = caffe_net.params();
+	const std::map<string, int> param_names_index = caffe_net.param_names_index();
+	const int num_batch = 1;
+	for (int i = 0; i < param_names.size(); ++i) {
+		std::map<string, int>::const_iterator iter = param_names_index.find(param_names[i]);
+		if (iter == param_names_index.end()) {
+			LOG(INFO) << "No parameter named " << param_names[i] << ".";
+			continue;
+		}
+		const shared_ptr<Blob<float> > param = params[iter->second];
+		FILE* fout = fopen(param_files[i].c_str(), "wb");
+		fwrite(&num_batch, sizeof(int), 1, fout);
+		const int num_axes = param->num_axes();
+		fwrite(&num_axes, sizeof(int), 1, fout);
+		for (int j = 0; j < num_axes; ++j) {
+			int dim = param->shape(j);
+			fwrite(&dim, sizeof(int), 1, fout);
+		}
+		fwrite(param->cpu_diff(), sizeof(float), param->count(), fout);
+		fclose(fout);
+	}
+
+	for (int i = 0; i < blob_names.size(); ++i) {
+		const shared_ptr<Blob<float> > blob = caffe_net.blob_by_name(blob_names[i]);
+		if (blob == NULL)
+			continue;
+		FILE* fout = fopen(blob_files[i].c_str(), "wb");
+		fwrite(&num_batch, sizeof(int), 1, fout);
+		const int num_axes = blob->num_axes();
+		fwrite(&num_axes, sizeof(int), 1, fout);
+		for (int j = 0; j < num_axes; ++j) {
+			int dim = blob->shape(j);
+			fwrite(&dim, sizeof(int), 1, fout);
+		}
+		fwrite(blob->cpu_diff(), sizeof(float), blob->count(), fout);
+		fclose(fout);
+	}
+
+	return 0;
+}
+RegisterBrewFunction(gradient);
 
 int main(int argc, char** argv) {
   // Print output to stderr (while still logging).

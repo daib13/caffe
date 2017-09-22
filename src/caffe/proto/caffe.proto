@@ -414,6 +414,7 @@ message LayerParameter {
   optional DuplicateParameter duplicate_param = 203;
   optional SeparateLossParameter separate_loss_param = 204;
   optional LogProbabilityParameter log_probability_param = 205;
+  optional SelfAssignLossParameter self_assign_loss_param = 206;
 }
 
 // Message that stores parameters used to apply transformation
@@ -1150,6 +1151,11 @@ message ScaleParameter {
   // may be more efficient).  Initialized with bias_filler (defaults to 0).
   optional bool bias_term = 4 [default = false];
   optional FillerParameter bias_filler = 5;
+}
+
+message SelfAssignLossParameter {
+  optional FillerParameter weight_filler = 1;
+  optional float lambda = 2 [default = 0.1];
 }
 
 message SeparateLossParameter {

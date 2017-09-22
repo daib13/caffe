@@ -161,6 +161,7 @@
     <ClCompile Include="..\..\src\caffe\layers\relu_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\reshape_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\scale_layer.cpp" />
+    <ClCompile Include="..\..\src\caffe\layers\self_assign_loss_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\separate_loss_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\sigmoid_cross_entropy_loss_layer.cpp" />
     <ClCompile Include="..\..\src\caffe\layers\sigmoid_layer.cpp" />
@@ -278,6 +279,7 @@
     <ClInclude Include="..\..\include\caffe\layers\relu_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\reshape_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\scale_layer.hpp" />
+    <ClInclude Include="..\..\include\caffe\layers\self_assign_loss_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\separate_loss_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\sigmoid_cross_entropy_loss_layer.hpp" />
     <ClInclude Include="..\..\include\caffe\layers\sigmoid_layer.hpp" />
@@ -389,6 +391,7 @@
     <CudaCompile Include="..\..\src\caffe\layers\kl_subspace_loss_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\log_probability_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\psroi_pooling_layer.cu" />
+    <CudaCompile Include="..\..\src\caffe\layers\self_assign_loss_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\separate_loss_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\smooth_l1_loss_layer.cu" />
     <CudaCompile Include="..\..\src\caffe\layers\smooth_L1_loss_ohem_layer.cu" />
