@@ -26,7 +26,9 @@ public:
 		return true;
 	}
 
-	virtual inline int ExactNumBottomBlobs() const { return 6; }
+	virtual inline int ExactNumBottomBlobs() const { return -1; }
+	virtual inline int MinNumBottomBlobs() const { return 4; }
+	virtual inline int MaxNumBottomBlobs() const { return 6; }
 	virtual inline int ExactNumTopBlobs() const { return -1; }
 	virtual inline int MinNumTopBlobs() const { return 1; }
 	virtual inline int MaxNumTopBlobs() const { return 2; }

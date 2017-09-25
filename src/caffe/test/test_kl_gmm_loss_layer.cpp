@@ -30,7 +30,7 @@ class KLGMMLossLayerTest : public MultiDeviceTest<TypeParam> {
         blob_top_(new Blob<Dtype>()) {
     // fill the values
     FillerParameter filler_param;
-	filler_param.set_min(0.01);
+	filler_param.set_min(0.1);
 	filler_param.set_max(0.99);
 	UniformFiller<Dtype> filler1(filler_param);
 	GaussianFiller<Dtype> filler2(filler_param);
@@ -80,6 +80,14 @@ TYPED_TEST(KLGMMLossLayerTest, TestGradient) {
 #endif
   if (Caffe::mode() == Caffe::CPU ||
       sizeof(Dtype) == 4 || IS_VALID_CUDA) {
+	  blob_bottom_vec_.clear();
+	  blob_bottom_vec_.push_back(blob_bottom1_);
+	  blob_bottom_vec_.push_back(blob_bottom2_);
+	  blob_bottom_vec_.push_back(blob_bottom3_);
+	  blob_bottom_vec_.push_back(blob_bottom4_);
+	  blob_bottom_vec_.push_back(blob_bottom5_);
+	  blob_bottom_vec_.push_back(blob_bottom6_);
+
     LayerParameter layer_param;
 	layer_param.add_loss_weight(1.2);
     KLGMMLossLayer<Dtype> layer(layer_param);
@@ -89,6 +97,33 @@ TYPED_TEST(KLGMMLossLayerTest, TestGradient) {
   } else {
     LOG(ERROR) << "Skipping test due to old architecture.";
   }
+}
+
+TYPED_TEST(KLGMMLossLayerTest, TestGradient2) {
+	typedef typename TypeParam::Dtype Dtype;
+	bool IS_VALID_CUDA = false;
+#ifndef CPU_ONLY
+	IS_VALID_CUDA = CAFFE_TEST_CUDA_PROP.major >= 2;
+#endif
+	if (Caffe::mode() == Caffe::CPU ||
+		sizeof(Dtype) == 4 || IS_VALID_CUDA) {
+
+		blob_bottom_vec_.clear();
+		blob_bottom_vec_.push_back(blob_bottom1_);
+		blob_bottom_vec_.push_back(blob_bottom4_);
+		blob_bottom_vec_.push_back(blob_bottom5_);
+		blob_bottom_vec_.push_back(blob_bottom6_);
+
+		LayerParameter layer_param;
+		layer_param.add_loss_weight(1.2);
+		KLGMMLossLayer<Dtype> layer(layer_param);
+		GradientChecker<Dtype> checker(1e-2, 2e-2);
+		checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
+			this->blob_top_vec_);
+	}
+	else {
+		LOG(ERROR) << "Skipping test due to old architecture.";
+	}
 }
 
 }  // namespace caffe

@@ -27,15 +27,27 @@ void KLGMMLossLayer<Dtype>::Reshape(
 	
 	N_ = bottom[0]->shape(0);
 	D_ = bottom[0]->count(1);
-	CHECK_EQ(bottom[1]->shape(0), N_) << "The num of mu_z and z should be the same.";
-	CHECK_EQ(bottom[1]->count(1), D_) << "The dim of mu_z and z should be the same.";
-	CHECK_EQ(bottom[2]->shape(0), N_) << "The num of sd_z and z should be the same.";
-	CHECK_EQ(bottom[2]->count(1), D_) << "The dim of sd_z and z should be the same.";
-	K_ = bottom[3]->count();
-	CHECK_EQ(bottom[4]->shape(0), K_) << "The num of mu_c and the count of the prior should be the same.";
-	CHECK_EQ(bottom[4]->count(1), D_) << "The dim of mu_c and z should be the same.";
-	CHECK_EQ(bottom[5]->shape(0), K_) << "The num of sd_c and the count of the prior should be the same.";
-	CHECK_EQ(bottom[5]->count(1), D_) << "The dim of sd_c and z should be the same.";
+	if (bottom.size() == 6) {
+		CHECK_EQ(bottom[1]->shape(0), N_) << "The num of mu_z and z should be the same.";
+		CHECK_EQ(bottom[1]->count(1), D_) << "The dim of mu_z and z should be the same.";
+		CHECK_EQ(bottom[2]->shape(0), N_) << "The num of sd_z and z should be the same.";
+		CHECK_EQ(bottom[2]->count(1), D_) << "The dim of sd_z and z should be the same.";
+		K_ = bottom[3]->count();
+		CHECK_EQ(bottom[4]->shape(0), K_) << "The num of mu_c and the count of the prior should be the same.";
+		CHECK_EQ(bottom[4]->count(1), D_) << "The dim of mu_c and z should be the same.";
+		CHECK_EQ(bottom[5]->shape(0), K_) << "The num of sd_c and the count of the prior should be the same.";
+		CHECK_EQ(bottom[5]->count(1), D_) << "The dim of sd_c and z should be the same.";
+	}
+	else if (bottom.size() == 4) {
+		K_ = bottom[1]->count();
+		CHECK_EQ(bottom[2]->shape(0), K_) << "The num of mu_c and the count of prior should be the same.";
+		CHECK_EQ(bottom[2]->count(1), D_) << "The dim of mu_c and z should be the same.";
+		CHECK_EQ(bottom[3]->shape(0), K_) << "The num of sd_c and the count of prior should be the same.";
+		CHECK_EQ(bottom[3]->count(1), D_) << "The dim of mu_c and z should be the same.";
+	}
+	else {
+		LOG(ERROR) << "The bottom number should be either 4 or 6.";
+	}
 
 	vector<int> logp_dim_shape;
 	logp_dim_shape.push_back(N_);
@@ -69,27 +81,35 @@ void KLGMMLossLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 	const vector<Blob<Dtype>*>& top) {
 
 	Dtype* loss_data = item_loss_.mutable_cpu_data();
+	caffe_set<Dtype>(N_, Dtype(0), loss_data);
 
 	const Dtype* z_data = bottom[0]->cpu_data();
-	const Dtype* mu_z_data = bottom[1]->cpu_data();
-	const Dtype* sd_z_data = bottom[2]->cpu_data();
-	Dtype* logp_dim_data = logp_dim_.mutable_cpu_data();
-	Dtype* logp_data = logp_.mutable_cpu_data();
 	int idx = 0;
-	for (int n = 0; n < N_; ++n) {
-		logp_data[n] = 0;
-		for (int d = 0; d < D_; ++d) {
-			const Dtype safe_sd = max(Dtype(1e-12), sd_z_data[idx]);
-			logp_dim_data[idx] = (-pow((z_data[idx] - mu_z_data[idx]) / safe_sd, 2) - LOG_TWO_PI) / Dtype(2) - log(safe_sd);
-			logp_data[n] += logp_dim_data[idx++];
+	if (bottom.size() == 6) {
+		const Dtype* mu_z_data = bottom[1]->cpu_data();
+		const Dtype* sd_z_data = bottom[2]->cpu_data();
+		Dtype* logp_dim_data = logp_dim_.mutable_cpu_data();
+		Dtype* logp_data = logp_.mutable_cpu_data();
+		for (int n = 0; n < N_; ++n) {
+			logp_data[n] = 0;
+			for (int d = 0; d < D_; ++d) {
+				const Dtype safe_sd = max(Dtype(1e-12), sd_z_data[idx]);
+				logp_dim_data[idx] = (-pow((z_data[idx] - mu_z_data[idx]) / safe_sd, 2) - LOG_TWO_PI) / Dtype(2) - log(safe_sd);
+				logp_data[n] += logp_dim_data[idx++];
+			}
+			loss_data[n] += logp_data[n];
 		}
-		loss_data[n] = logp_data[n];
 	}
 
 	Dtype loss = 0;
-	const Dtype* prior_data = bottom[3]->cpu_data();
-	const Dtype* mu_c_data = bottom[4]->cpu_data();
-	const Dtype* sd_c_data = bottom[5]->cpu_data();
+	const Dtype* prior_data = bottom[1]->cpu_data();
+	const Dtype* mu_c_data = bottom[2]->cpu_data();
+	const Dtype* sd_c_data = bottom[3]->cpu_data();
+	if (bottom.size() == 6) {
+		prior_data = bottom[3]->cpu_data();
+		mu_c_data = bottom[4]->cpu_data();
+		sd_c_data = bottom[5]->cpu_data();
+	}
 	Dtype* logq_dim_data = logq_dim_.mutable_cpu_data();
 	Dtype* logq_data = logq_.mutable_cpu_data();
 	Dtype* logq_max_data = logq_max_.mutable_cpu_data();
@@ -143,18 +163,39 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 	caffe_cpu_scale<Dtype>(N_*K_, -scale, logq_diff, logq_diff);
 
 	const Dtype* z_data = bottom[0]->cpu_data();
-	const Dtype* mu_z_data = bottom[1]->cpu_data();
-	const Dtype* sd_z_data = bottom[2]->cpu_data();
-	const Dtype* prior_data = bottom[3]->cpu_data();
-	const Dtype* mu_c_data = bottom[4]->cpu_data();
-	const Dtype* sd_c_data = bottom[5]->cpu_data();
-	if (propagate_down[0]) {
+	const Dtype* mu_z_data = NULL;
+	const Dtype* sd_z_data = NULL;
+	const Dtype* prior_data = bottom[1]->cpu_data();
+	const Dtype* mu_c_data = bottom[2]->cpu_data();
+	const Dtype* sd_c_data = bottom[3]->cpu_data();
+	if (bottom.size() == 6) {
+		mu_z_data = bottom[1]->cpu_data();
+		sd_z_data = bottom[2]->cpu_data();
+		prior_data = bottom[3]->cpu_data();
+		mu_c_data = bottom[4]->cpu_data();
+		sd_c_data = bottom[5]->cpu_data();
+	}
+
+	bool propagate_z = propagate_down[0];
+	bool propagate_mu_z = (bottom.size() == 6) ? propagate_down[1] : false;
+	bool propagate_sd_z = (bottom.size() == 6) ? propagate_down[2] : false;
+	bool propagate_prior = (bottom.size() == 6) ? propagate_down[3] : propagate_down[1];
+	bool propagate_mu_c = (bottom.size() == 6) ? propagate_down[4] : propagate_down[2];
+	bool propagate_sd_c = (bottom.size() == 6) ? propagate_down[5] : propagate_down[3];
+
+	if (propagate_z) {
 		Dtype* z_diff = bottom[0]->mutable_cpu_diff();
 		int z_idx = 0;
 		for (int n = 0; n < N_; ++n) 
 		for (int d = 0; d < D_; ++d) {
-			Dtype safe_sd = max(Dtype(1e-12), sd_z_data[z_idx]);
-			z_diff[z_idx] = logp_diff[n] * (mu_z_data[z_idx] - z_data[z_idx]) / pow(safe_sd, 2);
+			Dtype safe_sd = Dtype(1e-12);
+			if (mu_z_data) {
+				safe_sd = max(Dtype(1e-12), sd_z_data[z_idx]);
+				z_diff[z_idx] = logp_diff[n] * (mu_z_data[z_idx] - z_data[z_idx]) / pow(safe_sd, 2);
+			}
+			else {
+				z_diff[z_idx] = Dtype(0);
+			}
 			for (int k = 0; k < K_; ++k) {
 				int q_idx = n*K_ + k;
 				int c_idx = k*D_ + d;
@@ -164,7 +205,7 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 			++z_idx;
 		}
 	}
-	if (propagate_down[1]) {
+	if (propagate_mu_z) {
 		Dtype* mu_z_diff = bottom[1]->mutable_cpu_diff();
 		int z_idx = 0;
 		for (int n = 0; n < N_; ++n)
@@ -174,7 +215,7 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 			++z_idx;
 		}
 	}
-	if (propagate_down[2]) {
+	if (propagate_sd_z) {
 		Dtype* sd_z_diff = bottom[2]->mutable_cpu_diff();
 		int z_idx = 0;
 		for (int n = 0; n < N_; ++n)
@@ -184,8 +225,10 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 			++z_idx;
 		}
 	}
-	if (propagate_down[3]) {
-		Dtype* prior_diff = bottom[3]->mutable_cpu_diff();
+	if (propagate_prior) {
+		Dtype* prior_diff = bottom[1]->mutable_cpu_diff();
+		if (bottom.size() == 6)
+			prior_diff = bottom[3]->mutable_cpu_diff();
 		for (int k = 0; k < K_; ++k) {
 			prior_diff[k] = 0;
 			for (int n = 0; n < N_; ++n)
@@ -193,8 +236,10 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 			prior_diff[k] /= max(Dtype(1e-12), prior_data[k]);
 		}
 	}
-	if (propagate_down[4]) {
-		Dtype* mu_c_diff = bottom[4]->mutable_cpu_diff();
+	if (propagate_mu_c) {
+		Dtype* mu_c_diff = bottom[2]->mutable_cpu_diff();
+		if (bottom.size() == 6)
+			mu_c_diff = bottom[4]->mutable_cpu_diff();
 		int c_idx = 0;
 		for (int k = 0; k < K_; ++k)
 		for (int d = 0; d < D_; ++d) {
@@ -207,8 +252,10 @@ void KLGMMLossLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 			++c_idx;
 		}
 	}
-	if (propagate_down[5]) {
-		Dtype* sd_c_diff = bottom[5]->mutable_cpu_diff();
+	if (propagate_sd_c) {
+		Dtype* sd_c_diff = bottom[3]->mutable_cpu_diff();
+		if (bottom.size() == 6)
+			sd_c_diff = bottom[5]->mutable_cpu_diff();
 		int c_idx = 0;
 		for (int k = 0; k < K_; ++k)
 		for (int d = 0; d < D_; ++d) {
